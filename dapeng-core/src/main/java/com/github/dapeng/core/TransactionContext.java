@@ -73,24 +73,11 @@ public class TransactionContext {
     public static class Factory {
         private static ThreadLocal<TransactionContext> threadLocal = new ThreadLocal<>();
 
-        public static TransactionContext createNewInstance() {
-            TransactionContext context = new TransactionContext();
-            threadLocal.set(context);
-            return context;
-        }
-
-        public static TransactionContext setCurrentInstance(TransactionContext context) {
-            threadLocal.set(context);
-
-            return context;
-        }
-
         public static TransactionContext getCurrentInstance() {
             TransactionContext context = threadLocal.get();
 
             if (context == null) {
-                context = createNewInstance();
-
+                context = new TransactionContext();
                 threadLocal.set(context);
             }
 
@@ -108,9 +95,6 @@ public class TransactionContext {
      * @return
      */
     public static boolean hasCurrentInstance() {
-        if (Factory.threadLocal.get() == null)
-            return false;
-        else
-            return true;
+        return Factory.threadLocal.get() != null;
     }
 }

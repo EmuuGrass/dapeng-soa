@@ -15,6 +15,7 @@ import com.github.dapeng.impl.filters.HeadFilter;
 import com.github.dapeng.org.apache.thrift.TException;
 import com.github.dapeng.org.apache.thrift.protocol.TProtocol;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.slf4j.Logger;
@@ -22,9 +23,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Created by lihuimin on 2017/12/7.
+ *
+ * @author lihuimin
+ * @date 2017/12/7
  */
 public class SoaServerHandler extends ChannelInboundHandlerAdapter {
 
@@ -32,8 +36,32 @@ public class SoaServerHandler extends ChannelInboundHandlerAdapter {
 
     private final Container container;
 
+    /**
+     * TODO should be removed, for debug only
+     */
+    private final AtomicInteger invokeCounter = new AtomicInteger(0);
+
     public SoaServerHandler(Container container) {
         this.container = container;
+
+        //TODO debug only, should be removed.
+        new Thread("SoaServerHandler-ReqCounter-Thread"){
+
+            @Override
+            public void run(){
+                while(true) {
+                    if (container != null) {
+                        String logStr = "handle requests:" + invokeCounter.get();
+                        LOGGER.warn(logStr);
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }.start();
     }
 
     @Override
@@ -41,7 +69,7 @@ public class SoaServerHandler extends ChannelInboundHandlerAdapter {
         ByteBuf reqMessage = (ByteBuf) msg;
         TSoaTransport inputSoaTransport = new TSoaTransport(reqMessage);
         SoaMessageProcessor parser = new SoaMessageProcessor(inputSoaTransport);
-        final TransactionContext context = TransactionContext.Factory.createNewInstance();
+        final TransactionContext context = TransactionContext.Factory.getCurrentInstance();
 
         try {
             // parser.service, version, method, header, bodyProtocol
@@ -117,6 +145,8 @@ public class SoaServerHandler extends ChannelInboundHandlerAdapter {
                             onExit(ctx, getPrevChain(ctx));
                         }
                     } catch (Exception e) {
+                        // TODO debug only, should be removed
+                        invokeCounter.incrementAndGet();
                         // TODO 是否该判断是业务的异常还是框架的异常? 这里只记录框架异常
                         LOGGER.error(e.getMessage(), e);
                         writeErrorMessage(channelHandlerContext, context, new SoaException(SoaCode.UnKnown, e.getMessage()));
@@ -150,6 +180,9 @@ public class SoaServerHandler extends ChannelInboundHandlerAdapter {
         context.setHeader(soaHeader);
         try {
             application.info(this.getClass(), "{} {} {} operatorId:{} operatorName:{} response body:{}", soaHeader.getServiceName(), soaHeader.getVersionName(), soaHeader.getMethodName(), soaHeader.getOperatorId(), soaHeader.getOperatorName(), formatToString(soaFunction.respSerializer.toString(result)));
+
+            // TODO debug only, should be removed
+            invokeCounter.incrementAndGet();
 
             filterContext.setAttribute("channelHandlerContext", channelHandlerContext);
             filterContext.setAttribute("context", context);
@@ -212,5 +245,4 @@ public class SoaServerHandler extends ChannelInboundHandlerAdapter {
 
         return msg;
     }
-
 }
